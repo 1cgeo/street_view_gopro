@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Street View</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <script src="lib/maplibre-gl.js"></script>
+    <link href="lib/maplibre-gl.css" rel="stylesheet" />
+    <link href="lib/google-icon.css" rel="stylesheet">
+    <link type="text/css" rel="stylesheet" href="main.css">
+</head>
+
+<body>
+    <script src="lib/jquery-3.6.0.min.js"></script>
+    <script src="lib/turf.min.js"></script>
+    <!-- Import maps polyfill -->
+    <!-- Remove this when import maps will be widely supported -->
+    <script async src="lib/es-module-shims.js"></script>
+    <script type="text/javascript">
+        const module = {};
+        const setCurrentHoveElement = (name) => {
+            if (!module.setCurrentHoveElement) return
+            module.setCurrentHoveElement(name)
+        }
+    </script>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module" src="main.js"></script>
+
+    <div id="map" onmouseover="setCurrentHoveElement('map');"></div>
+    <div id="mini-map" onmouseover="setCurrentHoveElement('map');"></div>
+    <div id="container" onmouseover="setCurrentHoveElement('street');"></div>
+    <div class="floating-container">
+        <div class="floating-button">+</div>
+        <div class="element-container">
+            <a id="open-full-map" class="float-element">
+                <span>
+                    <i class="material-icons">open_in_full</i>
+                </span>
+            </a>
+            <a id="close-full-map" class="float-element">
+                <span>
+                    <i class="material-icons">close_fullscreen</i>
+                </span>
+            </a>
+        </div>
+    </div>
+</body>
+
+</html>
