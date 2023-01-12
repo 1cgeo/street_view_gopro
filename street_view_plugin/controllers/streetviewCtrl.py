@@ -135,5 +135,13 @@ class StreetViewCtrl:
             imagesFolderPath, 
             csvGyroPath
         )
+
+    def buildSiteMetadata(self, imageLayer, connectionLayer, metadataFolderPath):
+        buildSiteMetadata = self.functionFactory.create('BuildSiteMetadata')
+        buildSiteMetadata.build(
+            imageLayer, 
+            connectionLayer, 
+            metadataFolderPath
+        )
     
             

@@ -256,6 +256,13 @@ class StreetViewDock(QtWidgets.QDockWidget):
             title, 
             text
         )
+
+    def showInfoMessage(self, title, text):
+        QtWidgets.QMessageBox.information(
+            self,
+            title, 
+            text
+        )
     
     @QtCore.pyqtSlot(bool)
     def on_selectGyroFilePathBtn_clicked(self):
@@ -364,4 +371,31 @@ class StreetViewDock(QtWidgets.QDockWidget):
             self.imageFolderPathLe.text(),
             self.gyroCSVFilePathLe.text()
         )
+
+    @QtCore.pyqtSlot(bool)
+    def on_selectMetadataFolderPathBtn_clicked(self):
+        filePath = QtWidgets.QFileDialog.getExistingDirectory(
+            self, 
+            "Selecionar Pasta de Metadados",
+            ""
+        )
+        if not filePath:
+            return
+        self.metadataFolderPathLe.setText(filePath)
+        self.showInfoMessage('Aviso', 'Estrutura de imagens criada com sucesso!')
+
+    @QtCore.pyqtSlot(bool)
+    def on_buildSiteMetadataBtn_clicked(self):
+        imageLayer = self.imageLayer.currentLayer()
+        connectionLayer = self.connectionLayer.currentLayer()
+        metadataFolderPath = self.metadataFolderPathLe.text()
+        if not( imageLayer and connectionLayer and metadataFolderPath):
+            self.showErrorMessage('Erro', 'Preencha todos os campos!')
+            return
+        self.getController().buildSiteMetadata(
+            imageLayer,
+            connectionLayer,
+            metadataFolderPath
+        )
+        self.showInfoMessage('Aviso', 'Metadados criado com sucesso!')
 

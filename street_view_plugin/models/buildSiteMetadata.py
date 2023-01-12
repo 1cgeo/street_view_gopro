@@ -13,38 +13,70 @@ import glob
 import csv
 import math
 
-CSV_IMAGENS = 'E:\\URUGUAIANA\\street_uruguaiana.csv'
-METADATA_FOLDER = 'E:\\URUGUAIANA\\METADATA_CAMPO_FINAL'
-MAX_DISTANCE = 0.0003
-MIN_DISTANCE = 0.00005
-START_POINT = ""
-
-
 class BuildSiteMetadata:
-    pass
-    def getImages():
+
+    def build(self, imageLayer, connectionLayer, metadataFolderPath):
+        images = self.getImages(imageLayer)
+        images = self.createGeometries(images)
+        connection = connectionLayer
+        for link in connection.getFeatures():
+            neighbors = []
+            for photoRange in sorted(list(images)):
+                line = images[photoRange]['line']
+                if not link.geometry().buffer(0.00001, 5).intersects(line):
+                    continue
+                linkPoints = list(link.geometry().vertices())
+                linkPointA = QgsPointXY(linkPoints[0].x(), linkPoints[0].y())
+                linkPointB = QgsPointXY(linkPoints[-1].x(), linkPoints[-1].y())
+
+                for pointFeature in images[photoRange]['pointFeatures']:
+                    if not(
+                            pointFeature.geometry().buffer(0.00001, 5).intersects(QgsGeometry.fromPointXY(linkPointA)) or 
+                            pointFeature.geometry().buffer(0.00001, 5).intersects(QgsGeometry.fromPointXY(linkPointB))
+                        ):
+                        continue
+                    neighbors.append(
+                        {
+                            'faixa': photoRange,
+                            'numero': pointFeature['pointId']
+                        }
+                    )
+            if not neighbors:
+                continue
+            images[ neighbors[0]['faixa'] ]['images'][ neighbors[0]['numero'] ]['neighbors'].append(
+                images[ neighbors[-1]['faixa'] ]['images'][ neighbors[-1]['numero'] ]
+            )
+
+            images[ neighbors[-1]['faixa'] ]['images'][ neighbors[-1]['numero'] ]['neighbors'].append(
+                images[ neighbors[0]['faixa'] ]['images'][ neighbors[0]['numero'] ]
+            )
+        metadata = self.buildMetadata(images)
+        self.saveMetadata(metadata, metadataFolderPath)
+
+    def getImages(self, imageLayer):
         images = {}
-        with open(CSV_IMAGENS, newline='') as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                if not(int(row['faixa_img']) in images):
-                    images[int(row['faixa_img'])] = {
-                        'images': {}
-                    }
-                images[int(row['faixa_img'])]['images'][int(row['numero_img'])] = row
+        for feat in imageLayer.getFeatures():
+            if not(int(feat['faixa_img']) in images):
+                images[int(feat['faixa_img'])] = {
+                    'images': {}
+                }
+            images[int(feat['faixa_img'])]['images'][int(feat['numero_img'])] = {
+                'feature': feat
+            }
         return images
 
-    def createGeometries(images):
+    def createGeometries(self, images):
         tracks = {}
         for photoRange in sorted(list(images)):
             images[photoRange]['pointFeatures'] = []
             for photoNumber in sorted(list(images[photoRange]['images'])):
-                name = images[photoRange]['images'][photoNumber]['nome_img']
-                x = float(images[photoRange]['images'][photoNumber]['long_img'])
-                y = float(images[photoRange]['images'][photoNumber]['lat_img'])
+                feat = images[photoRange]['images'][photoNumber]['feature']
+                name = feat['nome_img']
+                x = float(feat['long_img'])
+                y = float(feat['lat_img'])
 
                 images[photoRange]['pointFeatures'].append(
-                    getPointFeature(
+                    self.getPointFeature(
                         x, y, photoRange, photoNumber, name
                     )
                 )
@@ -81,48 +113,48 @@ class BuildSiteMetadata:
                 links = []
 
 
-                heading = math.degrees(math.radians(float(currentPoint['heading_camera_gps'])) + 3.14159) % 360
+                heading = math.degrees(math.radians(float(currentPoint['feature']['heading_camera_gps'])) + 3.14159) % 360
                 
                     
 
                 if nextPoint:
                     links.append({
-                        "id": nextPoint['nome_img'],
-                        "img": nextPoint['nome_img'],
-                        "lon": nextPoint['long_img'],
-                        "lat": nextPoint['lat_img'],
-                        "ele": nextPoint['ele_img'],
+                        "id": nextPoint['feature']['nome_img'],
+                        "img": nextPoint['feature']['nome_img'],
+                        "lon": nextPoint['feature']['long_img'],
+                        "lat": nextPoint['feature']['lat_img'],
+                        "ele": nextPoint['feature']['ele_img'],
                         "icon": 'next',
                         "next": True
                     })
 
                 if previousPoint:
                     links.append({
-                        "id": previousPoint['nome_img'],
-                        "img": previousPoint['nome_img'],
-                        "lon": previousPoint['long_img'],
-                        "lat": previousPoint['lat_img'],
-                        "ele": previousPoint['ele_img'],
+                        "id": previousPoint['feature']['nome_img'],
+                        "img": previousPoint['feature']['nome_img'],
+                        "lon": previousPoint['feature']['long_img'],
+                        "lat": previousPoint['feature']['lat_img'],
+                        "ele": previousPoint['feature']['ele_img'],
                         "icon": 'next'
                     })
 
                 for neighbor in currentPoint['neighbors']:
                     links.append({
-                        "id": neighbor['nome_img'],
-                        "img": neighbor['nome_img'],
-                        "lon": neighbor['long_img'],
-                        "lat": neighbor['lat_img'],
-                        "ele": neighbor['ele_img'],
+                        "id": neighbor['feature']['nome_img'],
+                        "img": neighbor['feature']['nome_img'],
+                        "lon": neighbor['feature']['long_img'],
+                        "lat": neighbor['feature']['lat_img'],
+                        "ele": neighbor['feature']['ele_img'],
                         "icon": 'next'
                     })
 
                 meta = {
                     "camera": {
-                        "id":  currentPoint['nome_img'],
-                        "img": currentPoint['nome_img'],
-                        "lon": currentPoint['long_img'],
-                        "lat": currentPoint['lat_img'],
-                        "ele": currentPoint['ele_img'],
+                        "id":  currentPoint['feature']['nome_img'],
+                        "img": currentPoint['feature']['nome_img'],
+                        "lon": currentPoint['feature']['long_img'],
+                        "lat": currentPoint['feature']['lat_img'],
+                        "ele": currentPoint['feature']['ele_img'],
                         "heading": heading
                     },
                     "targets": links
@@ -134,13 +166,13 @@ class BuildSiteMetadata:
                 count +=1 """
         return metadata
 
-    def saveMetadata(self, metadata):
-        files = glob.glob('{}/*'.format(METADATA_FOLDER))
+    def saveMetadata(self, metadata, metadataFolderPath):
+        files = glob.glob('{}/*'.format(metadataFolderPath))
         for f in files:
             os.remove(f)
 
         for meta in metadata:
-            with open(os.path.join(METADATA_FOLDER, '{}.json'.format(meta['camera']['img'])), 'w') as outfile:
+            with open(os.path.join(metadataFolderPath, '{}.json'.format(meta['camera']['img'])), 'w') as outfile:
                 json.dump(
                     meta, 
                     outfile,
@@ -149,7 +181,7 @@ class BuildSiteMetadata:
 
     def getPointFeature(self, x, y, trackId, pointId, image):
         point = QgsFeature()
-        point.setFields(getPointFields())
+        point.setFields(self.getPointFields())
         point['trackId'] = trackId
         point['pointId'] = pointId
         point['image'] = image
@@ -164,21 +196,6 @@ class BuildSiteMetadata:
         fields.append(QgsField('ele', QVariant.String))
         return fields
 
-    def addElevationAttributes(self, images, demLayer):
-        for imgRange in images:
-            for imgId in images[imgRange]['images']:
-                img = images[imgRange]['images'][imgId]
-                point = QgsPointXY(img['lonlat'][0], img['lonlat'][1])
-                img['ele'] = list(demLayer.dataProvider().identify( point, QgsRaster.IdentifyFormatValue ).results().values())[0]
-
-    def getLayer(self, layerName):
-        layers = QgsProject.instance().mapLayers()
-        for l in layers.values():
-            if not(layerName == l.name()):
-                continue
-            return l
-        return None
-
     def saveCSV(self, images, filePath):
         hasHeader = False
         with open(filePath, 'w') as outfile:
@@ -191,61 +208,3 @@ class BuildSiteMetadata:
                             w = csv.DictWriter(outfile, images[photoRange]['images'][photoNumber].keys())
                             w.writeheader()
                         w.writerow(images[photoRange]['images'][photoNumber])
-
-
-    def addPoint(self):
-        #MULTICAPTURA_1530_000065
-        pass
-
-    def getVectorLayer(self, name):
-        found = [l for l in [
-            l
-            for l in QgsProject.instance().mapLayers().values()
-            if l.type() == QgsMapLayer.VectorLayer
-        ] if l.name() == name]
-        if len(found) != 1:
-            raise Exception("{} não encontrado!".format(name))
-        return found[0]
-        
-    def main(self):
-        images = getImages()
-        images = createGeometries(images)
-        connection = getVectorLayer('conexoes')
-        for link in connection.getFeatures():
-            neighbors = []
-            for photoRange in sorted(list(images)):
-                line = images[photoRange]['line']
-                if not link.geometry().buffer(0.00001, 5).intersects(line):
-                    continue
-                linkPoints = list(link.geometry().vertices())
-                linkPointA = QgsPointXY(linkPoints[0].x(), linkPoints[0].y())
-                linkPointB = QgsPointXY(linkPoints[-1].x(), linkPoints[-1].y())
-
-                for pointFeature in images[photoRange]['pointFeatures']:
-                    if not(
-                            pointFeature.geometry().buffer(0.00001, 5).intersects(QgsGeometry.fromPointXY(linkPointA)) or 
-                            pointFeature.geometry().buffer(0.00001, 5).intersects(QgsGeometry.fromPointXY(linkPointB))
-                        ):
-                        continue
-                    neighbors.append(
-                        {
-                            'faixa': photoRange,
-                            'numero': pointFeature['pointId']
-                        }
-                    )
-            if not neighbors:
-                continue
-            images[ neighbors[0]['faixa'] ]['images'][ neighbors[0]['numero'] ]['neighbors'].append(
-                images[ neighbors[-1]['faixa'] ]['images'][ neighbors[-1]['numero'] ]
-            )
-
-            images[ neighbors[-1]['faixa'] ]['images'][ neighbors[-1]['numero'] ]['neighbors'].append(
-                images[ neighbors[0]['faixa'] ]['images'][ neighbors[0]['numero'] ]
-            )
-        metadata = buildMetadata(images)
-        saveMetadata(metadata)
-
-
-
-    
-#main()
