@@ -1,5 +1,19 @@
 # **STREET VIEW GOPRO**
 
+### **FOTOS**
+
+1. As fotos foram realizado usando uma caminhonete, bastão de selfie, fita tape, câmera Gopro Fusion, computador e GPS.
+
+2. Antes de executar as fotográfias foi feito um teste de consumo de bateria da câmera para ver quanto tempo leva para o consumo de 1% da mesma. E, foi feito o mesmo teste para o armazenamento.
+
+3. A câmera foi fixa no bastão de selfie, que estava no centro da grade vigia da caminhonete preso com uso de fita tape.
+
+4. Foi utilizado para orientar todo o trajeto o QGIS, uma imagem de satélite da região e o GPS.
+    > **Note:**
+    > É necessário fazer um planejamento dos trajetos para evitar duplicar caminhos.
+
+5. Durante o trabalho a câmera estava no modo de foto por lapso de tempo de 0,5 segundos. A velocidade da caminhonete ficou em média 35 km por hora.
+
 ### **PROCESSAMENTO**
     
 1. Rederizar as imagens Fisheye gerada pela câmera.
