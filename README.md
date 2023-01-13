@@ -15,7 +15,7 @@
 
         ![](./doc/plugin.png)
 
-    2. Selecione a pasta o as imagens renderizadas e o .csv com os dados do GPS e click em "Gerar pontos".
+    2. Selecione a pasta com as imagens renderizadas e o .csv com os dados do GPS e clicar em "Gerar pontos".
 
         ![](./doc/metadado1.png)
 
@@ -49,8 +49,32 @@
 
         ![](./doc/connect3.png)
 
-    6. Agora deverá ser gerado os metadados que seram utilizados no site. Para isso, basta selecionar os pontos de imagem, as conexões e uma pasta de saída:
+    6. Agora deverá ser gerado os metadados que seram utilizados no site. Para isso, basta selecionar os pontos de imagem, as conexões, uma pasta de saída e clicar em "Gerar metadados site":
+
+        ![](./doc/metadado2.png)
 
 ### **SITE**
 
+1. Converter as imagens para o formato .webp:
+    
+    [Tutorial para conversão](https://www.tecmint.com/convert-images-to-webp-format-in-linux/)
+
+    > **Note:**
+    > Esse formato diminui em média 10MB por imagem no conjunto de 10.012 imagens que usei proporcionou uma economia de aproximadamente 100GB.
+
+2. a pasta "site" contém um site para navegar nas imagens. Crie uma pasta "IMG_CAMPO" e coloque todas as imagens e uma pasta "METADATA_CAMPO" e coloque os metadados gerados na seção anterior.
+
+3. Por fim, sirva o site com a lançador de sua escolha.
+
+    > **Note:**
+    > Eu tinho o python3 instalado na minha máquina e utilizei o seguinte comando para lançar o site:
+    ```
+    $ cd site
+    $ python3 -m http.server
+    ```
+
+    ![](./doc/street1.png)
+
+    ![](./doc/street2.png)
+    
 
