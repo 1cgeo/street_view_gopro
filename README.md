@@ -78,7 +78,7 @@
 
 2. a pasta "site" contém um site para navegar nas imagens. Crie uma pasta "IMG_CAMPO" e coloque todas as imagens e uma pasta "METADATA_CAMPO" e coloque os metadados gerados na seção anterior.
 
-3. Por fim, sirva o site com a lançador de sua escolha.
+3. Por fim, sirva o site com o lançador de sua escolha.
 
     > **Note:**
     > Eu tinho o python3 instalado na minha máquina e utilizei o seguinte comando para lançar o site:
