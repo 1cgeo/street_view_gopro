@@ -261,7 +261,7 @@ class BuildSiteMetadata:
                             w.writeheader()
                         w.writerow(images[photoRange]['images'][photoNumber])
 
-    def saveGeoJSON(self, layer, name, outputPath):
+    def saveGeojson(self, layer, name, outputPath):
         
 
         # Salvar a camada como GeoJSON
