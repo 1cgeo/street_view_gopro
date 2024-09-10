@@ -11,7 +11,8 @@ import re
 import copy
 import json
 import glob
-from PyQt5.QtCore import QVariant
+from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtGui import QColor
 import processing
 import random
 
@@ -67,32 +68,21 @@ class BuildStruct:
         imagesDF["time"] = imagesDF["time"].apply(int)
         return imagesDF
 
-    def loadGPSDataset(self, csvGyroPath):
-        gpsDF = pd.read_csv(csvGyroPath, names=["giro","long","lat","time"], header=0)
-        gpsDF["time"] = gpsDF["time"].apply(lambda v: v + 60 * 60 * 3 )
-        gpsDF["heading"] = gpsDF["giro"].apply(lambda v: math.degrees(math.radians(v) + 3.14159)%360 )
-        gpsDF["heading_camera"] = gpsDF["giro"].apply(lambda v: (math.degrees(math.radians(v) + 3.14159) + 90)%360 )
-        gpsDF["time"] = gpsDF["time"].apply(int)
-        gpsDF['fid'] = range(0, len(gpsDF))
-        return gpsDF           
-
-    def linkImageGPS(self, images, gps):
-        join = []
-        blacklist = []
-        columnNames = ['{}_img'.format(name) for name in images.columns.to_list()] + ['{}_gps'.format(name) for name in gps.columns.to_list()]
-        for idx, row in images.sort_values('time').iterrows():
-            filtered = gps.sort_values('fid')[~gps['fid'].isin(blacklist)]
-            if filtered.empty:
-                continue
-            found = filtered.loc[(filtered['time'] - row['time']).abs().idxmin()]
-            join.append(
-                row.to_list() + found.to_list()
-            )
-            blacklist.append(found['fid'])
-        return pd.DataFrame(join, columns=columnNames)
-
     def removeDuplicatePoints(self, points):
-        return points.loc[points.groupby(['long_gps','lat_gps'])['numero_img'].idxmin()]
+        if points.empty:
+            print('empty')
+        grouped = points.groupby(['long_img','lat_img'])
+        if grouped.ngroups == 0:
+            print('ngroups')
+        print(points)
+        tamanho_points = points.shape[0]
+        points_cleaned  = points.drop_duplicates(subset=['long_img', 'lat_img'], keep='first')
+        print('----------------------')
+        print(points_cleaned )
+        tamanho_points_cleaned = points_cleaned.shape[0]
+
+        print(tamanho_points, tamanho_points_cleaned)
+        return points_cleaned 
 
     def removeDuplicateLinesV2(self, dataset):
         points = []
@@ -189,18 +179,6 @@ class BuildStruct:
                 photosFinal.append(found.iloc[0].to_list())
         return pd.DataFrame(photosFinal, columns=[name for name in groupSorted.columns.to_list()])
 
-    def buildLineGeomtries(self):
-        processing.runAndLoadResults(
-            'native:pointstopath', 
-             { 
-                    'CLOSE_PATH' : False, 
-                    'GROUP_EXPRESSION' : '"faixa_img"', 
-                    'INPUT' : 'delimitedtext://file:///{}?type=csv&maxFields=10000&detectTypes=yes&xField=long_img&yField=lat_img&crs=EPSG:4326&spatialIndex=no&subsetIndex=no&watchFile=no'.format(self.getStructPath()), 
-                    'NATURAL_SORT' : False, 
-                    'ORDER_EXPRESSION' : '', 
-                    'OUTPUT' : 'TEMPORARY_OUTPUT' 
-            }
-        )
 
     def getStructPath(self):
         return os.path.join(
@@ -261,15 +239,87 @@ class BuildStruct:
                     deleteImages[rowB['faixa_img']] = []
                 deleteImages[rowB['faixa_img']].append(rowB['numero_img'])
         return pd.DataFrame(points, columns=[name for name in dataset.columns.to_list()])
+    
+    def random_color(self):
+        return '#{:06x}'.format(random.randint(0, 0xFFFFFF))
+    
+    def buildLineStyle(self, count):
+        lines = []
+        for _ in range(count):
+            layer_style = {}
+            layer_style['color'] = '%d, %d, %d' % (random.randrange(0, 256), random.randrange(0, 256), random.randrange(0, 256))
+            layer_style['width'] = '1'
+            lines.append( QgsSimpleLineSymbolLayer.create(layer_style) )
+        return lines
+    
+    def styleLineLayer(self, layer:QgsVectorLayer, fieldName="faixa_img", width=1.0):
+        if not layer:
+            return
+        else:
+            
+            # Obter os valores únicos do atributo
+            fni = layer.dataProvider().fieldNameIndex(fieldName)
+            unique_values = layer.uniqueValues(fni)
+            lineStyle = self.buildLineStyle( len(unique_values) )
+            
+            # Criar as categorias
+            categories = []
+            symbolLine = QgsSymbol.defaultSymbol(layer.geometryType())
+            if symbolLine is None:
+                color = self.random_color()
+                symbolLine = QgsLineSymbol.createSimple({'color': color.name(), 'width': str(width)})
+            if symbolLine.symbolLayer(0):
+                symbolLine.symbolLayer(0).setWidth(width)
+            
+            for idx, value in enumerate(unique_values):
+                symbolLayer = lineStyle[idx]
+                if symbolLayer is not None:
+                    symbolLine.changeSymbolLayer(0, symbolLayer)
+                    symbolLine2 = QgsLineSymbol.createSimple({'color': self.random_color(), 'width': '1'})
+                
+                    categoryLine = QgsRendererCategory()
+                    categoryLine.setValue(value)
+                    categoryLine.setSymbol(symbolLine2)
+                    categoryLine.setLabel(str(value))
+                    categories.append(categoryLine)
+            
+            # Criar o renderizador categorizado
+            renderer = QgsCategorizedSymbolRenderer(fieldName, categories)
+            
+            # Aplicar o renderizador à camada
+            if renderer is not None:
+                layer.setRenderer(renderer)
+            
+            # Atualizar a exibição da camada
+            layer.triggerRepaint()
 
-    def build(self, imagesFolderPath, csvGyroPath):
+    def buildLineGeometries(self)->QgsVectorLayer:
+        layer = processing.run(
+            'native:pointstopath', 
+             { 
+                    'CLOSE_PATH' : False, 
+                    'GROUP_EXPRESSION' : '"faixa_img"', 
+                    'INPUT' : 'delimitedtext://file:///{}?type=csv&maxFields=10000&detectTypes=yes&xField=long_img&yField=lat_img&crs=EPSG:4326&spatialIndex=no&subsetIndex=no&watchFile=no'.format(self.getStructPath()), 
+                    'NATURAL_SORT' : False, 
+                    'ORDER_EXPRESSION' : '"time_img"', 
+                    'OUTPUT' : 'TEMPORARY_OUTPUT' 
+            }
+        )['OUTPUT']
+        layer.startEditing()
+        layer.setName('conexao')
+        layer.commitChanges()
+
+        QgsProject.instance().addMapLayer(layer)
+        self.styleLineLayer(layer, fieldName='faixa_img', width=1)
+    
+    def build(self, imagesFolderPath):
         images = self.loadImagesDataset(imagesFolderPath)
-        gps = self.loadGPSDataset(csvGyroPath)
-        result = self.linkImageGPS(images, gps)
-        result = self.removeDuplicatePoints(result)
+        images.columns = ['{}_img'.format(name) for name in images.columns]
+        result = self.removeDuplicatePoints(images)
         result = self.removeDuplicateLinesV2(result) #otimizar
         struct = self.createLines(result)
         struct = self.removeNearPoints(struct)
         struct.to_csv(self.getStructPath(), index=False)
         self.loadCSVLayer()
-        #self.buildLineGeomtries()  
+        self.buildLineGeometries()  
+        

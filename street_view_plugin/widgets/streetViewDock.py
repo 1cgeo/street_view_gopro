@@ -264,6 +264,17 @@ class StreetViewDock(QtWidgets.QDockWidget):
             text
         )
     
+    def showYesNoMessage(self, title, text):
+        msgBox = QtWidgets.QMessageBox()
+        msgBox.setWindowTitle(title)
+        msgBox.setText(text)
+        msgBox.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        msgBox.setDefaultButton(QtWidgets.QMessageBox.No)
+        result = msgBox.exec_()
+        if result == QtWidgets.QMessageBox.Yes:
+            return True
+        return False
+    
     @QtCore.pyqtSlot(bool)
     def on_selectGyroFilePathBtn_clicked(self):
         filePath = QtWidgets.QFileDialog.getSaveFileName(
@@ -351,25 +362,12 @@ class StreetViewDock(QtWidgets.QDockWidget):
         self.imageFolderPathLe.setText(filePath)
 
     @QtCore.pyqtSlot(bool)
-    def on_selecCSVGyroPathBtn_clicked(self):
-        filePath = QtWidgets.QFileDialog.getOpenFileName(
-            self, 
-            "Selecionar CSV track giroscópio",
-            "",
-            '*.csv'
-        )
-        if not filePath[0]:
-            return
-        self.gyroCSVFilePathLe.setText(filePath[0])
-
-    @QtCore.pyqtSlot(bool)
     def on_buildStructBtn_clicked(self):
-        if not( self.imageFolderPathLe.text() and self.gyroCSVFilePathLe.text()):
-            self.showErrorMessage('Erro', 'Selecione os Arquivos')
+        if not self.imageFolderPathLe.text() :
+            self.showErrorMessage('Erro', 'Selecione a Pasta de Imagens')
             return
         self.getController().buildStruct(
-            self.imageFolderPathLe.text(),
-            self.gyroCSVFilePathLe.text()
+            self.imageFolderPathLe.text()
         )
 
     @QtCore.pyqtSlot(bool)
@@ -382,7 +380,7 @@ class StreetViewDock(QtWidgets.QDockWidget):
         if not filePath:
             return
         self.metadataFolderPathLe.setText(filePath)
-        self.showInfoMessage('Aviso', 'Estrutura de imagens criada com sucesso!')
+        # self.showInfoMessage('Aviso', 'Estrutura de imagens criada com sucesso!')
 
     @QtCore.pyqtSlot(bool)
     def on_buildSiteMetadataBtn_clicked(self):
@@ -398,4 +396,62 @@ class StreetViewDock(QtWidgets.QDockWidget):
             metadataFolderPath
         )
         self.showInfoMessage('Aviso', 'Metadados criado com sucesso!')
+
+    @QtCore.pyqtSlot(bool)
+    def on_processPointsAndLinesBtn_clicked(self):
+        pointLayer = self.prePointLayer.currentLayer()
+        lineLayer = self.preLineLayer.currentLayer()
+        distance = self.distance.value()
+        if not( pointLayer and lineLayer):
+            self.showErrorMessage('Erro', 'Preencha todas as camadas!')
+            return
+        if distance<=0:
+            self.showErrorMessage('Erro', 'Distancia não pode ser menor ou igual a 0!')
+            return
+        self.getController().processPointsAndLines(
+            pointLayer,
+            lineLayer,
+            distance
+        )
+        self.showInfoMessage('Aviso', 'Camadas processadas com sucesso!')
+
+    @QtCore.pyqtSlot(bool)
+    def on_applyMaskBtn_clicked(self):
+        inputFolder = self.inputFolder.filePath()
+        outputFolder = self.outputFolder.filePath()
+        carMask = self.carMaskBtn.isChecked()
+        customMask = self.customMaskBtn.isChecked()
+        pointLayer = self.imageLayer_3.currentLayer()
+        if carMask:
+            mask = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'resources', 'masks', 'mascara_branca_viatura_eb_dsg.png'))
+        elif customMask:
+            mask = self.mask.filePath()
+            if not os.path.isfile(mask):
+                self.showErrorMessage('Erro', 'Máscara invalida!')
+                return
+        else:
+            self.showErrorMessage('Erro', 'Nenhuma máscara selecionada!')
+            return
+        if not( inputFolder and outputFolder and mask and pointLayer):
+            self.showErrorMessage('Erro', 'Preencha todos os campos!')
+            return
+        if inputFolder==outputFolder:
+            continuar = self.showYesNoMessage('Aviso', 'As pastas de entrada e saída são iguais. Deseja continuar?\n Caso sejam iguais as imagens serão sobrescritas!')
+            if not continuar:
+                return
+        self.getController().applyMask(
+            inputFolder,
+            outputFolder,
+            mask,
+            pointLayer
+        )
+        self.showInfoMessage('Aviso', 'Máscaras aplicadas com sucesso!')
+
+
+    @QtCore.pyqtSlot(bool)
+    def on_customMaskBtn_toggled(self):
+        if self.customMaskBtn.isChecked():
+            self.mask.setEnabled(True)
+        else:
+            self.mask.setEnabled(False)
 

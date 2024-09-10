@@ -129,11 +129,10 @@ class StreetViewCtrl:
         alarm = self.functionFactory.create('Alarm')
         alarm.beep(qty)
 
-    def buildStruct(self, imagesFolderPath, csvGyroPath):
+    def buildStruct(self, imagesFolderPath):
         buildStruct = self.functionFactory.create('BuildStruct')
         buildStruct.build(
-            imagesFolderPath, 
-            csvGyroPath
+            imagesFolderPath
         )
 
     def buildSiteMetadata(self, imageLayer, connectionLayer, metadataFolderPath):
@@ -143,5 +142,23 @@ class StreetViewCtrl:
             connectionLayer, 
             metadataFolderPath
         )
+
+    def processPointsAndLines(self, pointsLayer, linesLayer, distance):
+        processPointsAndLines = self.functionFactory.create('ProcessPointsAndLines')
+        processPointsAndLines.process(
+            pointsLayer, 
+            linesLayer, 
+            distance
+        )
+
+    def applyMask(self, inputFolder, outputFolder, mask, imageLayer):
+        applyMask = self.functionFactory.create('ApplyMask')
+        applyMask.apply(
+            inputFolder, 
+            outputFolder, 
+            mask,
+            imageLayer
+        )
+
     
             

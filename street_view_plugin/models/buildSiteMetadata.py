@@ -1,57 +1,48 @@
-from qgis.core import *
-from PyQt5.QtCore import *
+from qgis.core import (
+    QgsPointXY,
+    QgsGeometry,
+    QgsProcessingException,
+    QgsPoint,
+    QgsDistanceArea,
+    QgsFeature,
+    QgsField,
+    QgsFields,
+    QgsVectorLayer,
+    QgsVectorFileWriter,
+)
+from qgis.PyQt.QtCore import *
+from qgis.PyQt.Qt import QVariant
 
 import os
-from PIL import Image
-from PIL.ExifTags import TAGS, GPSTAGS
-import re
-import numpy as np
-from datetime import datetime
-import copy
 import json
 import glob
 import csv
 import math
 
+from street_view_plugin.models import graphHandler
+
 class BuildSiteMetadata:
 
-    def build(self, imageLayer, connectionLayer, metadataFolderPath):
-        images = self.getImages(imageLayer)
-        images = self.createGeometries(images)
-        connection = connectionLayer
-        for link in connection.getFeatures():
-            neighbors = []
-            for photoRange in sorted(list(images)):
-                line = images[photoRange]['line']
-                if not link.geometry().buffer(0.00001, 5).intersects(line):
-                    continue
-                linkPoints = list(link.geometry().vertices())
-                linkPointA = QgsPointXY(linkPoints[0].x(), linkPoints[0].y())
-                linkPointB = QgsPointXY(linkPoints[-1].x(), linkPoints[-1].y())
-
-                for pointFeature in images[photoRange]['pointFeatures']:
-                    if not(
-                            pointFeature.geometry().buffer(0.00001, 5).intersects(QgsGeometry.fromPointXY(linkPointA)) or 
-                            pointFeature.geometry().buffer(0.00001, 5).intersects(QgsGeometry.fromPointXY(linkPointB))
-                        ):
-                        continue
-                    neighbors.append(
-                        {
-                            'faixa': photoRange,
-                            'numero': pointFeature['pointId']
-                        }
-                    )
-            if not neighbors:
-                continue
-            images[ neighbors[0]['faixa'] ]['images'][ neighbors[0]['numero'] ]['neighbors'].append(
-                images[ neighbors[-1]['faixa'] ]['images'][ neighbors[-1]['numero'] ]
+    def build(self, imageLayer: QgsVectorLayer, connectionLayer: QgsVectorLayer, metadataFolderPath):
+        imageDict = {image['index']: image for image in imageLayer.getFeatures()} 
+        try:
+            import networkx as nx
+        except ImportError:
+            raise QgsProcessingException(
+                self.tr(
+                    "Esse algoritmo requer a biblioteca Python networkx. Por favor, instale esta biblioteca e tente novamente."
+                )
             )
-
-            images[ neighbors[-1]['faixa'] ]['images'][ neighbors[-1]['numero'] ]['neighbors'].append(
-                images[ neighbors[0]['faixa'] ]['images'][ neighbors[0]['numero'] ]
-            )
-        metadata = self.buildMetadata(images)
+        # images = self.getImages(imageLayer)
+        G = graphHandler.build_graph_with_photo_ids(nx, connectionLayer, imageLayer, 'index')
+        neighboursDict  ={}
+        for i in imageDict:
+            neighbours = [imageDict[n] for n in graphHandler.get_neighbors(G, i)]
+            neighboursDict[imageDict[i]] = neighbours
+        metadata = self.buildMetadata(neighboursDict)
         self.saveMetadata(metadata, metadataFolderPath)
+        self.saveGeojson(imageLayer, "fotos", metadataFolderPath)
+        self.saveGeojson(connectionLayer,"fotos_linhas", metadataFolderPath)
 
     def getImages(self, imageLayer):
         images = {}
@@ -66,7 +57,6 @@ class BuildSiteMetadata:
         return images
 
     def createGeometries(self, images):
-        tracks = {}
         for photoRange in sorted(list(images)):
             images[photoRange]['pointFeatures'] = []
             for photoNumber in sorted(list(images[photoRange]['images'])):
@@ -96,74 +86,86 @@ class BuildSiteMetadata:
         distance = QgsDistanceArea()
         distance.setEllipsoid('WGS84')
         return distance.measureLine(point1, point2)
+    
+    def getPreviousNextNeighbours(self, currentPoint, allneighbours):
+        previousPoint = None
+        nextPoint = None
+        neighbours = []
+        for neighbour in allneighbours:
+            if neighbour['faixa_img'] != currentPoint['faixa_img']:
+                neighbours.append(neighbour)
+            elif neighbour['numero_img'] > currentPoint['numero_img']:
+                nextPoint = neighbour
+            else:
+                previousPoint = neighbour
+        return previousPoint, nextPoint, neighbours
 
 
-    def buildMetadata(self, tracks):
+    def buildMetadata(self, neighboursDict):
         metadata = []
-        count = 0
-        for trackId in sorted(list(tracks.keys())):
-            imageIds = sorted(list(tracks[trackId]['images']))
+        for currentPoint in neighboursDict:
+            allneighbours = neighboursDict[currentPoint]
+            previousPoint, nextPoint, neighbours = self.getPreviousNextNeighbours(currentPoint, allneighbours)
+
+            links = []
+            cpLatLong = (currentPoint['lat_img'], currentPoint['long_img'])
+            ppLatLong = (previousPoint['lat_img'], previousPoint['long_img']) if previousPoint else None
+            npLatLong = (nextPoint['lat_img'], nextPoint['long_img']) if nextPoint else None
+
+
+            # heading = math.degrees(math.radians(float(currentPoint['heading_camera_gps'])) + 3.14159) % 360
+            heading = self.get_azimuth(cpLatLong, ppLatLong, npLatLong)
             
-            for idx, imageId in enumerate(imageIds):
-
-                currentPoint = tracks[trackId]['images'][imageId]
-                previousPoint = tracks[trackId]['images'][ imageIds[idx - 1] ] if (idx - 1) >= 0 else None
-                nextPoint = tracks[trackId]['images'][ imageIds[idx + 1] ] if (idx + 1) < len(imageIds) else None
-
-                links = []
-
-
-                heading = math.degrees(math.radians(float(currentPoint['feature']['heading_camera_gps'])) + 3.14159) % 360
                 
-                    
 
-                if nextPoint:
-                    links.append({
-                        "id": nextPoint['feature']['nome_img'],
-                        "img": nextPoint['feature']['nome_img'],
-                        "lon": nextPoint['feature']['long_img'],
-                        "lat": nextPoint['feature']['lat_img'],
-                        "ele": nextPoint['feature']['ele_img'],
-                        "icon": 'next',
-                        "next": True
-                    })
+            if nextPoint:
+                links.append({
+                    "id": nextPoint['nome_img'],
+                    "img": nextPoint['nome_img'],
+                    "lon": nextPoint['long_img'],
+                    "lat": nextPoint['lat_img'],
+                    "ele": nextPoint['ele_img'],
+                    "icon": 'next',
+                    "next": True
+                })
 
-                if previousPoint:
-                    links.append({
-                        "id": previousPoint['feature']['nome_img'],
-                        "img": previousPoint['feature']['nome_img'],
-                        "lon": previousPoint['feature']['long_img'],
-                        "lat": previousPoint['feature']['lat_img'],
-                        "ele": previousPoint['feature']['ele_img'],
-                        "icon": 'next'
-                    })
+            if previousPoint:
+                links.append({
+                    "id": previousPoint['nome_img'],
+                    "img": previousPoint['nome_img'],
+                    "lon": previousPoint['long_img'],
+                    "lat": previousPoint['lat_img'],
+                    "ele": previousPoint['ele_img'],
+                    "icon": 'next'
+                })
 
-                for neighbor in currentPoint['neighbors']:
-                    links.append({
-                        "id": neighbor['feature']['nome_img'],
-                        "img": neighbor['feature']['nome_img'],
-                        "lon": neighbor['feature']['long_img'],
-                        "lat": neighbor['feature']['lat_img'],
-                        "ele": neighbor['feature']['ele_img'],
-                        "icon": 'next'
-                    })
+            # quando a funcao abaixo esta habilitada, os pontos nas extremidades sao conectados
+            for neighbour in neighbours:
+                links.append({
+                    "id": neighbour['nome_img'],
+                    "img": neighbour['nome_img'],
+                    "lon": neighbour['long_img'],
+                    "lat": neighbour['lat_img'],
+                    "ele": neighbour['ele_img'],
+                    "icon": 'next'
+                })
 
-                meta = {
-                    "camera": {
-                        "id":  currentPoint['feature']['nome_img'],
-                        "img": currentPoint['feature']['nome_img'],
-                        "lon": currentPoint['feature']['long_img'],
-                        "lat": currentPoint['feature']['lat_img'],
-                        "ele": currentPoint['feature']['ele_img'],
-                        "heading": heading
-                    },
-                    "targets": links
-                }
+            meta = {
+                "camera": {
+                    "id":  currentPoint['nome_img'],
+                    "img": currentPoint['nome_img'],
+                    "lon": currentPoint['long_img'],
+                    "lat": currentPoint['lat_img'],
+                    "ele": currentPoint['ele_img'],
+                    "heading": heading
+                },
+                "targets": links
+            }
 
-                metadata.append(meta)
-                """ if count == 3:
-                    break
-                count +=1 """
+            metadata.append(meta)
+            """ if count == 3:
+                break
+            count +=1 """
         return metadata
 
     def saveMetadata(self, metadata, metadataFolderPath):
@@ -178,6 +180,56 @@ class BuildSiteMetadata:
                     outfile,
                     indent=4
                 )
+    
+    def calculate_azimuth(self, point1, point2):
+        """
+        Calcula o azimute entre dois pontos.
+        :param point1: (latitude1, longitude1)
+        :param point2: (latitude2, longitude2)
+        :return: Azimute em graus
+        """
+        lat1, lon1 = math.radians(point1[0]), math.radians(point1[1])
+        lat2, lon2 = math.radians(point2[0]), math.radians(point2[1])
+        
+        delta_lon = lon2 - lon1
+        x = math.sin(delta_lon) * math.cos(lat2)
+        y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(delta_lon)
+        
+        initial_bearing = math.atan2(x, y)
+        initial_bearing = math.degrees(initial_bearing)
+        
+        # Normalizar o azimute para estar entre 0 e 360 graus
+        azimuth = (initial_bearing + 360) % 360
+        return azimuth
+
+    # Função para calcular o azimute de currentPoint
+    def get_azimuth(self, currentPoint, previousPoint=None, nextPoint=None):
+        """
+        Calcula o azimute de currentPoint com base em previousPoint ou nextPoint.
+        Se ambos estiverem disponíveis, calcula a média dos dois azimutes.
+        :param currentPoint: (latitude, longitude) do ponto atual
+        :param previousPoint: (latitude, longitude) do ponto anterior, opcional
+        :param nextPoint: (latitude, longitude) do ponto seguinte, opcional
+        :return: Azimute médio em graus
+        """
+        if previousPoint and nextPoint:
+            azimuth1 = self.calculate_azimuth(previousPoint, currentPoint)
+            azimuth2 = self.calculate_azimuth(currentPoint, nextPoint)
+            
+            # Calcula a média levando em conta que azimutes são circulares (0 a 360 graus)
+            azimuth_mean = (azimuth1 + azimuth2) / 2
+            
+            # Verifica se a diferença entre os azimutes é maior que 180 para evitar erros na média circular
+            if abs(azimuth1 - azimuth2) > 180:
+                azimuth_mean = (azimuth_mean + 180) % 360
+            
+            return azimuth_mean
+        elif previousPoint:
+            return self.calculate_azimuth(previousPoint, currentPoint)
+        elif nextPoint:
+            return self.calculate_azimuth(currentPoint, nextPoint)
+        else:
+            return 0
 
     def getPointFeature(self, x, y, trackId, pointId, image):
         point = QgsFeature()
@@ -208,3 +260,15 @@ class BuildSiteMetadata:
                             w = csv.DictWriter(outfile, images[photoRange]['images'][photoNumber].keys())
                             w.writeheader()
                         w.writerow(images[photoRange]['images'][photoNumber])
+
+    def saveGeoJSON(self, layer, name, outputPath):
+        
+
+        # Salvar a camada como GeoJSON
+        error = QgsVectorFileWriter.writeAsVectorFormat(
+            layer,
+            outputPath,
+            "utf-8",  # codificação
+            layer.crs(),  # sistema de referência de coordenadas
+            name
+        )
