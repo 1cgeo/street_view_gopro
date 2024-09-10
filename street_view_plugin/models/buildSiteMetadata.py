@@ -41,8 +41,10 @@ class BuildSiteMetadata:
             neighboursDict[imageDict[i]] = neighbours
         metadata = self.buildMetadata(neighboursDict)
         self.saveMetadata(metadata, metadataFolderPath)
-        self.saveGeojson(imageLayer, "fotos", metadataFolderPath)
-        self.saveGeojson(connectionLayer,"fotos_linhas", metadataFolderPath)
+        fotosPath = os.path.join(metadataFolderPath, 'fotos')
+        self.saveGeojson(imageLayer, fotosPath)
+        fotos_linhasPath = os.path.join(metadataFolderPath, 'fotos_linhas')
+        self.saveGeojson(connectionLayer, fotos_linhasPath)
 
     def getImages(self, imageLayer):
         images = {}
@@ -261,7 +263,7 @@ class BuildSiteMetadata:
                             w.writeheader()
                         w.writerow(images[photoRange]['images'][photoNumber])
 
-    def saveGeojson(self, layer, name, outputPath):
+    def saveGeojson(self, layer, outputPath):
         
 
         # Salvar a camada como GeoJSON
@@ -270,5 +272,5 @@ class BuildSiteMetadata:
             outputPath,
             "utf-8",  # codificação
             layer.crs(),  # sistema de referência de coordenadas
-            name
+            "GeoJSON",
         )
