@@ -43,7 +43,7 @@ class BuildSiteMetadata:
         self.saveMetadata(metadata, metadataFolderPath)
         fotosPath = os.path.join(metadataFolderPath, 'fotos')
         self.saveGeojson(imageLayer, fotosPath)
-        fotos_linhasPath = os.path.join(metadataFolderPath, 'fotos_linhas')
+        fotos_linhasPath = os.path.join(metadataFolderPath, 'fotos_linha')
         self.saveGeojson(connectionLayer, fotos_linhasPath)
 
     def getImages(self, imageLayer):
@@ -97,10 +97,39 @@ class BuildSiteMetadata:
             if neighbour['faixa_img'] != currentPoint['faixa_img']:
                 neighbours.append(neighbour)
             elif neighbour['numero_img'] > currentPoint['numero_img']:
-                nextPoint = neighbour
+                if not nextPoint:
+                    nextPoint = neighbour
+                else:
+                    nextPoint, neighbour = self.seqOrNeighbours(currentPoint, nextPoint, neighbour)
+                    neighbours.append(neighbour)
             else:
-                previousPoint = neighbour
+                if not previousPoint:
+                    previousPoint = neighbour
+                else:
+                    previousPoint, neighbour = self.seqOrNeighbours(currentPoint, previousPoint, neighbour)
+                    neighbours.append(neighbour)
         return previousPoint, nextPoint, neighbours
+    
+    def seqOrNeighbours(self, currentPoint, point1, point2):
+        namePoint1 = point1['nome_img']
+        namePoint1Split = namePoint1.split('_')
+        numberPoint1 = int(namePoint1Split[-2]+namePoint1Split[-1])
+        namePoint2 = point2['nome_img']
+        namePoint2Split = namePoint2.split('_')
+        numberPoint2 = int(namePoint2Split[-2]+namePoint2Split[-1])
+        nameCurrentPoint = currentPoint['nome_img']
+        nameCurrentPointSplit = nameCurrentPoint.split('_')
+        numberCurrentPoint = int(nameCurrentPointSplit[-2]+nameCurrentPointSplit[-1])
+        dif1 = abs(numberPoint1 - numberCurrentPoint)
+        dif2 = abs(numberPoint2 - numberCurrentPoint)
+        if dif1 < dif2:
+            seq = point1
+            neighbour = point2
+        else:
+            seq = point2
+            neighbour = point1
+
+        return seq, neighbour
 
 
     def buildMetadata(self, neighboursDict):
@@ -141,7 +170,6 @@ class BuildSiteMetadata:
                     "icon": 'next'
                 })
 
-            # quando a funcao abaixo esta habilitada, os pontos nas extremidades sao conectados
             for neighbour in neighbours:
                 links.append({
                     "id": neighbour['nome_img'],
@@ -172,8 +200,8 @@ class BuildSiteMetadata:
 
     def saveMetadata(self, metadata, metadataFolderPath):
         files = glob.glob('{}/*'.format(metadataFolderPath))
-        for f in files:
-            os.remove(f)
+        # for f in files:
+        #     os.remove(f)
 
         for meta in metadata:
             with open(os.path.join(metadataFolderPath, '{}.json'.format(meta['camera']['img'])), 'w') as outfile:
