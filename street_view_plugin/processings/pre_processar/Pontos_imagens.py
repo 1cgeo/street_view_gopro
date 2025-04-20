@@ -1,4 +1,3 @@
-
 """
 /***************************************************************************
  Imagens para pontos
@@ -12,10 +11,9 @@
 
 /***************************************************************************
  *                                                                         *
- *   This program is free software; you can redistribute it and/or modify  *
- *   it under the terms of the GNU General Public License as published by  *
- *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
+ *   Este programa é um software livre; você pode redistribuí-lo e/ou     *
+ *   modificá-lo sob os termos da Licença Pública Geral GNU conforme      *
+ *   publicada pela Free Software Foundation; versão 2 ou posterior.      *
  *                                                                         *
  ***************************************************************************/
 """
@@ -24,11 +22,23 @@ __author__ = '1° Ten Raul Magno / 1° CGEO'
 __date__ = '2025-04-17'
 __copyright__ = '(C) 2024 by Brazilian Army Cartographic Mapoteca Tools'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
-from qgis.core import (QgsProcessing, QgsProcessingParameterFile, QgsProcessingAlgorithm, QgsVectorLayer, QgsField, QgsFeature, QgsGeometry, QgsPointXY, QgsProject, QgsProcessingException)
+from qgis.core import (
+    QgsProcessing,
+    QgsProcessingParameterFile,
+    QgsProcessingParameterFileDestination,
+    QgsProcessingAlgorithm,
+    QgsVectorLayer,
+    QgsField,
+    QgsFields,
+    QgsFeature,
+    QgsGeometry,
+    QgsPointXY,
+    QgsProject,
+    QgsProcessingException,
+    QgsVectorFileWriter,
+    QgsWkbTypes,
+    QgsCoordinateReferenceSystem
+)
 from PyQt5.QtCore import QVariant
 import os
 from PIL import Image
@@ -37,6 +47,7 @@ import re
 
 class ImageToGeometry(QgsProcessingAlgorithm):
     PASTA = 'PASTA'
+    SAIDA = 'SAIDA'
 
     def initAlgorithm(self, config=None):
         self.addParameter(
@@ -47,18 +58,26 @@ class ImageToGeometry(QgsProcessingAlgorithm):
                 defaultValue=None
             )
         )
-    
+        self.addParameter(
+            QgsProcessingParameterFileDestination(
+                self.SAIDA,
+                'Arquivo de saída (GeoPackage)',
+                fileFilter='GeoPackage (*.gpkg)'
+            )
+        )
+
     def processAlgorithm(self, parameters, context, feedback):
         pasta = self.parameterAsFile(parameters, self.PASTA, context)
-        
+        saida = self.parameterAsFileOutput(parameters, self.SAIDA, context)
+
         if not os.path.isdir(pasta):
             raise QgsProcessingException(f"A pasta especificada não existe: {pasta}")
-        
+
         dataset = self.loadImagesDataset(pasta)
-        self.createGeometry(dataset)
-        
-        return {}
-    
+        self.createGeometry(dataset, saida, context, feedback)
+
+        return {'OUTPUT': saida}
+
     def loadImagesDataset(self, imagesFolderPath):
         dataset = []
         for filename in os.listdir(imagesFolderPath):
@@ -69,10 +88,10 @@ class ImageToGeometry(QgsProcessingAlgorithm):
             if lon is not None and lat is not None and ele is not None:
                 dataset.append((filename, lon, lat, ele))
         return dataset
-    
+
     def check_image_extension(self, filename):
         return bool(re.search(r"\.(jpg)$", filename, re.IGNORECASE))
-    
+
     def getExif(self, filename):
         exif = Image.open(filename)._getexif()
         info = {}
@@ -88,7 +107,7 @@ class ImageToGeometry(QgsProcessingAlgorithm):
                     gps_info[name] = value
                 info['GPSInfo'] = gps_info
         return info
-    
+
     def getCoordinates(self, info):
         try:
             for key in ['Latitude', 'Longitude', 'Altitude']:
@@ -101,32 +120,45 @@ class ImageToGeometry(QgsProcessingAlgorithm):
             return info.get('Longitude'), info.get('Latitude'), info.get('Altitude')
         except:
             return None, None, None
-    
+
     def gms2degrees(self, deg, minutes, seconds, direction):
         return (float(deg) + float(minutes)/60 + float(seconds)/(60*60)) * (-1 if direction in ['W', 'S'] else 1)
-    
-    def createGeometry(self, dataset):
-        layer = QgsVectorLayer("Point?crs=EPSG:4326", "imagens", "memory")
-        provider = layer.dataProvider()
 
-        provider.addAttributes([
+    def createGeometry(self, dataset, saida, context, feedback):
+        fields = [
             QgsField("filename", QVariant.String),
             QgsField("lon", QVariant.Double),
             QgsField("lat", QVariant.Double),
             QgsField("ele", QVariant.Double)
-        ])
-        layer.updateFields()
+        ]
 
-        features = []
+        qgs_fields = QgsFields()
+        for field in fields:
+            qgs_fields.append(field)
+
+        writer = QgsVectorFileWriter(
+            saida, 'UTF-8', qgs_fields,
+            QgsWkbTypes.Point,
+            QgsCoordinateReferenceSystem("EPSG:4326"),
+            "GPKG"
+        )
+
+        if writer.hasError() != QgsVectorFileWriter.NoError:
+            raise QgsProcessingException(f"Erro ao criar o GeoPackage: {writer.errorMessage()}")
+
         for filename, lon, lat, ele in dataset:
             feat = QgsFeature()
-            feat.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat))) 
-            feat.setAttributes([filename, lon, lat, ele]) 
-            features.append(feat)
+            feat.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat)))
+            feat.setAttributes([filename, lon, lat, ele])
+            writer.addFeature(feat)
 
-        provider.addFeatures(features)
-        layer.updateExtents()
-        QgsProject.instance().addMapLayer(layer)
+        del writer  # Finaliza a escrita
+
+        camada = QgsVectorLayer(saida, "Imagens_GeoRef", "ogr")
+        if camada.isValid():
+            QgsProject.instance().addMapLayer(camada)
+        else:
+            feedback.pushWarning("A camada foi criada, mas não pôde ser carregada automaticamente.")
 
     def name(self):
         return 'image2geom'
