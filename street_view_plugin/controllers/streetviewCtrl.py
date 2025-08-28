@@ -160,5 +160,14 @@ class StreetViewCtrl:
             imageLayer
         )
 
+    def applyBlurMask(self, inputFolder, outputFolder, mask, imageLayer):
+        applyBlurMask = self.functionFactory.create('ApplyBlurMask')
+        applyBlurMask.apply(
+            inputFolder, 
+            outputFolder, 
+            mask,
+            imageLayer
+        )
+
     
             

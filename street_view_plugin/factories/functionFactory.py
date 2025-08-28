@@ -7,6 +7,7 @@ from street_view_plugin.models.buildStruct import BuildStruct
 from street_view_plugin.models.buildSiteMetadata import BuildSiteMetadata
 from street_view_plugin.models.processPointsAndLines import ProcessPointsAndLines
 from street_view_plugin.models.applyMask import ApplyMask
+from street_view_plugin.models.applyBlurMask import ApplyBlurMask
 
 class FunctionFactory:
 
@@ -20,5 +21,6 @@ class FunctionFactory:
             'BuildStruct': lambda *args: BuildStruct(*args),
             'ProcessPointsAndLines': lambda *args: ProcessPointsAndLines(*args),
             'ApplyMask': lambda *args: ApplyMask(*args),
+            'ApplyBlurMask': lambda *args: ApplyBlurMask(*args),
         }
         return functions[functionName](*args) if functionName in functions else None

@@ -420,32 +420,58 @@ class StreetViewDock(QtWidgets.QDockWidget):
         inputFolder = self.inputFolder.filePath()
         outputFolder = self.outputFolder.filePath()
         carMask = self.carMaskBtn.isChecked()
+        carBlurMask = self.carBlurMaskBtn.isChecked()   # Novo botão
         customMask = self.customMaskBtn.isChecked()
         pointLayer = self.imageLayer_3.currentLayer()
+
         if carMask:
-            mask = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'resources', 'masks', 'mascara_branca_viatura_eb_dsg.png'))
+            mask = os.path.normpath(
+                os.path.join(os.path.dirname(__file__), '..', 'resources', 'masks', 'mascara_branca_viatura_eb_dsg.png')
+            )
+        elif carBlurMask:
+            mask = os.path.normpath(
+                os.path.join(os.path.dirname(__file__), '..', 'resources', 'masks', 'mascara_branca_viatura.png')
+            )
         elif customMask:
             mask = self.mask.filePath()
             if not os.path.isfile(mask):
-                self.showErrorMessage('Erro', 'Máscara invalida!')
+                self.showErrorMessage('Erro', 'Máscara inválida!')
                 return
         else:
             self.showErrorMessage('Erro', 'Nenhuma máscara selecionada!')
             return
-        if not( inputFolder and outputFolder and mask and pointLayer):
+
+        if not (inputFolder and outputFolder and mask and pointLayer):
             self.showErrorMessage('Erro', 'Preencha todos os campos!')
             return
-        if inputFolder==outputFolder:
-            continuar = self.showYesNoMessage('Aviso', 'As pastas de entrada e saída são iguais. Deseja continuar?\n Caso sejam iguais as imagens serão sobrescritas!')
+
+        if inputFolder == outputFolder:
+            continuar = self.showYesNoMessage(
+                'Aviso',
+                'As pastas de entrada e saída são iguais. Deseja continuar?\n'
+                'Caso sejam iguais as imagens serão sobrescritas!'
+            )
             if not continuar:
                 return
-        self.getController().applyMask(
-            inputFolder,
-            outputFolder,
-            mask,
-            pointLayer
-        )
+
+        # Decide qual função chamar
+        if carBlurMask:
+            self.getController().applyBlurMask(
+                inputFolder,
+                outputFolder,
+                mask,
+                pointLayer
+            )
+        else:
+            self.getController().applyMask(
+                inputFolder,
+                outputFolder,
+                mask,
+                pointLayer
+            )
+
         self.showInfoMessage('Aviso', 'Máscaras aplicadas com sucesso!')
+
 
 
     @QtCore.pyqtSlot(bool)

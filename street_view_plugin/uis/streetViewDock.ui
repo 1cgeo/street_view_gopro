@@ -957,7 +957,7 @@
                  <item>
                   <widget class="QLabel" name="label_15">
                    <property name="text">
-                    <string>Distância para &quot;puxar&quot; os pontos para linhas</string>
+                    <string>Distância para "puxar" os pontos para linhas</string>
                    </property>
                   </widget>
                  </item>
@@ -1250,6 +1250,16 @@
                     <bool>true</bool>
                    </property>
                    <property name="checked">
+                    <bool>true</bool>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QRadioButton" name="carBlurMaskBtn">
+                   <property name="text">
+                    <string>Viatura Blur</string>
+                   </property>
+                   <property name="checkable">
                     <bool>true</bool>
                    </property>
                   </widget>
